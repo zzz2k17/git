@@ -54,7 +54,7 @@ test_expect_success 'reflog, repack' '
 	for count in $(test_seq 1 10)
 	do
 		test_commit "number $count" file.t $count number-$count ||
-	        return 1
+		return 1
 	done &&
 	git pack-refs &&
 	ls -1 .git/reftable >table-files &&
@@ -152,9 +152,8 @@ test_expect_success 'rebase' '
 	git branch source &&
 	git checkout HEAD^ &&
 	test_commit message3 file3 &&
- 	git rebase source &&
+	git rebase source &&
 	test -f file2
 '
 
 test_done
-
