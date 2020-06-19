@@ -53,6 +53,14 @@ test_expect_success 'refname mapping can be dumped' '
 	grep "^refs/heads/other refs/heads/" refs.out
 '
 
+test_expect_success 'path mapping can be dumped' '
+	git fast-export --anonymize --all \
+		--dump-anonymized-paths=paths.out >/dev/null &&
+	# do not assume a particular anonymization scheme or order;
+	# just sanity check that a sample line looks sensible.
+	grep "^foo " paths.out
+'
+
 # NOTE: we chdir to the new, anonymized repository
 # after this. All further tests should assume this.
 test_expect_success 'import stream to new repository' '
