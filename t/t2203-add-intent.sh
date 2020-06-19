@@ -232,7 +232,7 @@ test_expect_success 'double rename detection in status' '
 	)
 '
 
-test_expect_success 'diff-files/diff-cached shows ita as new/not-new files' '
+test_expect_success 'diff/diff-cached shows ita as new/not-new files' '
 	git reset --hard &&
 	echo new >new-ita &&
 	git add -N new-ita &&
@@ -243,6 +243,29 @@ test_expect_success 'diff-files/diff-cached shows ita as new/not-new files' '
 	test_must_be_empty actual2
 '
 
+test_expect_success 'diff-files shows i-t-a files as new files' '
+	git reset --hard &&
+	touch empty &&
+	content="foo" &&
+	echo $content >not-empty &&
+	git add -N empty not-empty &&
+	git diff-files -p >actual &&
+	hash_e=$(git hash-object empty) &&
+	hash_n=$(git hash-object not-empty) &&
+	cat >expect <<-EOF &&
+	diff --git a/empty b/empty
+	new file mode 100644
+	index 0000000..$(git rev-parse --short $hash_e)
+	diff --git a/not-empty b/not-empty
+	new file mode 100644
+	index 0000000..$(git rev-parse --short $hash_n)
+	--- /dev/null
+	+++ b/not-empty
+	@@ -0,0 +1 @@
+	+$content
+	EOF
+	test_cmp expect actual
+'
 
 test_expect_success '"diff HEAD" includes ita as new files' '
 	git reset --hard &&
