@@ -23,7 +23,6 @@
 #include "worktree.h"
 #include "hashmap.h"
 #include "strvec.h"
-#include "format-support.h"
 
 static struct ref_msg {
 	const char *gone;
@@ -128,8 +127,8 @@ static struct used_atom {
 			unsigned int nobracket : 1, push : 1, push_remote : 1;
 		} remote_ref;
 		struct {
-			enum { C_BARE, C_BODY, C_BODY_DEP, C_LENGTH, C_LINES,
-			       C_SIG, C_SUB, C_SUB_SANITIZE, C_TRAILERS } option;
+			enum { C_BARE, C_BODY, C_BODY_DEP, C_LENGTH,
+			       C_LINES, C_SIG, C_SUB, C_TRAILERS } option;
 			struct process_trailer_options trailer_opts;
 			unsigned int nlines;
 		} contents;
@@ -140,10 +139,7 @@ static struct used_atom {
 		struct {
 			enum { O_FULL, O_LENGTH, O_SHORT } option;
 			unsigned int length;
-		} oid;
-		struct email_option {
-			enum { EO_RAW, EO_TRIM, EO_LOCALPART } option;
-		} email_option;
+		} objectname;
 		struct refname_atom refname;
 		char *head;
 	} u;
@@ -302,12 +298,9 @@ static int body_atom_parser(const struct ref_format *format, struct used_atom *a
 static int subject_atom_parser(const struct ref_format *format, struct used_atom *atom,
 			       const char *arg, struct strbuf *err)
 {
-	if (!arg)
-		atom->u.contents.option = C_SUB;
-	else if (!strcmp(arg, "sanitize"))
-		atom->u.contents.option = C_SUB_SANITIZE;
-	else
-		return strbuf_addf_ret(err, -1, _("unrecognized %%(subject) argument: %s"), arg);
+	if (arg)
+		return strbuf_addf_ret(err, -1, _("%%(subject) does not take arguments"));
+	atom->u.contents.option = C_SUB;
 	return 0;
 }
 
@@ -367,36 +360,22 @@ static int contents_atom_parser(const struct ref_format *format, struct used_ato
 	return 0;
 }
 
-static int oid_atom_parser(const struct ref_format *format, struct used_atom *atom,
-			   const char *arg, struct strbuf *err)
+static int objectname_atom_parser(const struct ref_format *format, struct used_atom *atom,
+				  const char *arg, struct strbuf *err)
 {
 	if (!arg)
-		atom->u.oid.option = O_FULL;
+		atom->u.objectname.option = O_FULL;
 	else if (!strcmp(arg, "short"))
-		atom->u.oid.option = O_SHORT;
+		atom->u.objectname.option = O_SHORT;
 	else if (skip_prefix(arg, "short=", &arg)) {
-		atom->u.oid.option = O_LENGTH;
-		if (strtoul_ui(arg, 10, &atom->u.oid.length) ||
-		    atom->u.oid.length == 0)
-			return strbuf_addf_ret(err, -1, _("positive value expected '%s' in %%(%s)"), arg, atom->name);
-		if (atom->u.oid.length < MINIMUM_ABBREV)
-			atom->u.oid.length = MINIMUM_ABBREV;
+		atom->u.objectname.option = O_LENGTH;
+		if (strtoul_ui(arg, 10, &atom->u.objectname.length) ||
+		    atom->u.objectname.length == 0)
+			return strbuf_addf_ret(err, -1, _("positive value expected objectname:short=%s"), arg);
+		if (atom->u.objectname.length < MINIMUM_ABBREV)
+			atom->u.objectname.length = MINIMUM_ABBREV;
 	} else
-		return strbuf_addf_ret(err, -1, _("unrecognized argument '%s' in %%(%s)"), arg, atom->name);
-	return 0;
-}
-
-static int person_email_atom_parser(const struct ref_format *format, struct used_atom *atom,
-				    const char *arg, struct strbuf *err)
-{
-	if (!arg)
-		atom->u.email_option.option = EO_RAW;
-	else if (!strcmp(arg, "trim"))
-		atom->u.email_option.option = EO_TRIM;
-	else if (!strcmp(arg, "localpart"))
-		atom->u.email_option.option = EO_LOCALPART;
-	else
-		return strbuf_addf_ret(err, -1, _("unrecognized email option: %s"), arg);
+		return strbuf_addf_ret(err, -1, _("unrecognized %%(objectname) argument: %s"), arg);
 	return 0;
 }
 
@@ -501,25 +480,25 @@ static struct {
 	{ "refname", SOURCE_NONE, FIELD_STR, refname_atom_parser },
 	{ "objecttype", SOURCE_OTHER, FIELD_STR, objecttype_atom_parser },
 	{ "objectsize", SOURCE_OTHER, FIELD_ULONG, objectsize_atom_parser },
-	{ "objectname", SOURCE_OTHER, FIELD_STR, oid_atom_parser },
+	{ "objectname", SOURCE_OTHER, FIELD_STR, objectname_atom_parser },
 	{ "deltabase", SOURCE_OTHER, FIELD_STR, deltabase_atom_parser },
-	{ "tree", SOURCE_OBJ, FIELD_STR, oid_atom_parser },
-	{ "parent", SOURCE_OBJ, FIELD_STR, oid_atom_parser },
+	{ "tree", SOURCE_OBJ },
+	{ "parent", SOURCE_OBJ },
 	{ "numparent", SOURCE_OBJ, FIELD_ULONG },
 	{ "object", SOURCE_OBJ },
 	{ "type", SOURCE_OBJ },
 	{ "tag", SOURCE_OBJ },
 	{ "author", SOURCE_OBJ },
 	{ "authorname", SOURCE_OBJ },
-	{ "authoremail", SOURCE_OBJ, FIELD_STR, person_email_atom_parser },
+	{ "authoremail", SOURCE_OBJ },
 	{ "authordate", SOURCE_OBJ, FIELD_TIME },
 	{ "committer", SOURCE_OBJ },
 	{ "committername", SOURCE_OBJ },
-	{ "committeremail", SOURCE_OBJ, FIELD_STR, person_email_atom_parser },
+	{ "committeremail", SOURCE_OBJ },
 	{ "committerdate", SOURCE_OBJ, FIELD_TIME },
 	{ "tagger", SOURCE_OBJ },
 	{ "taggername", SOURCE_OBJ },
-	{ "taggeremail", SOURCE_OBJ, FIELD_STR, person_email_atom_parser },
+	{ "taggeremail", SOURCE_OBJ },
 	{ "taggerdate", SOURCE_OBJ, FIELD_TIME },
 	{ "creator", SOURCE_OBJ },
 	{ "creatordate", SOURCE_OBJ, FIELD_TIME },
@@ -924,27 +903,21 @@ int verify_ref_format(struct ref_format *format)
 	return 0;
 }
 
-static const char *do_grab_oid(const char *field, const struct object_id *oid,
-			       struct used_atom *atom)
+static int grab_objectname(const char *name, const struct object_id *oid,
+			   struct atom_value *v, struct used_atom *atom)
 {
-	switch (atom->u.oid.option) {
-	case O_FULL:
-		return oid_to_hex(oid);
-	case O_LENGTH:
-		return find_unique_abbrev(oid, atom->u.oid.length);
-	case O_SHORT:
-		return find_unique_abbrev(oid, DEFAULT_ABBREV);
-	default:
-		BUG("unknown %%(%s) option", field);
-	}
-}
-
-static int grab_oid(const char *name, const char *field, const struct object_id *oid,
-		    struct atom_value *v, struct used_atom *atom)
-{
-	if (starts_with(name, field)) {
-		v->s = xstrdup(do_grab_oid(field, oid, atom));
-		return 1;
+	if (starts_with(name, "objectname")) {
+		if (atom->u.objectname.option == O_SHORT) {
+			v->s = xstrdup(find_unique_abbrev(oid, DEFAULT_ABBREV));
+			return 1;
+		} else if (atom->u.objectname.option == O_FULL) {
+			v->s = xstrdup(oid_to_hex(oid));
+			return 1;
+		} else if (atom->u.objectname.option == O_LENGTH) {
+			v->s = xstrdup(find_unique_abbrev(oid, atom->u.objectname.length));
+			return 1;
+		} else
+			BUG("unknown %%(objectname) option");
 	}
 	return 0;
 }
@@ -972,7 +945,7 @@ static void grab_common_values(struct atom_value *val, int deref, struct expand_
 		} else if (!strcmp(name, "deltabase"))
 			v->s = xstrdup(oid_to_hex(&oi->delta_base_oid));
 		else if (deref)
-			grab_oid(name, "objectname", &oi->oid, v, &used_atom[i]);
+			grab_objectname(name, &oi->oid, v, &used_atom[i]);
 	}
 }
 
@@ -1011,20 +984,21 @@ static void grab_commit_values(struct atom_value *val, int deref, struct object 
 			continue;
 		if (deref)
 			name++;
-		if (grab_oid(name, "tree", get_commit_tree_oid(commit), v, &used_atom[i]))
-			continue;
-		if (!strcmp(name, "numparent")) {
+		if (!strcmp(name, "tree")) {
+			v->s = xstrdup(oid_to_hex(get_commit_tree_oid(commit)));
+		}
+		else if (!strcmp(name, "numparent")) {
 			v->value = commit_list_count(commit->parents);
 			v->s = xstrfmt("%lu", (unsigned long)v->value);
 		}
-		else if (starts_with(name, "parent")) {
+		else if (!strcmp(name, "parent")) {
 			struct commit_list *parents;
 			struct strbuf s = STRBUF_INIT;
 			for (parents = commit->parents; parents; parents = parents->next) {
-				struct object_id *oid = &parents->item->object.oid;
+				struct commit *parent = parents->item;
 				if (parents != commit->parents)
 					strbuf_addch(&s, ' ');
-				strbuf_addstr(&s, do_grab_oid("parent", oid, &used_atom[i]));
+				strbuf_addstr(&s, oid_to_hex(&parent->object.oid));
 			}
 			v->s = strbuf_detach(&s, NULL);
 		}
@@ -1065,35 +1039,16 @@ static const char *copy_name(const char *buf)
 	return xstrdup("");
 }
 
-static const char *copy_email(const char *buf, struct used_atom *atom)
+static const char *copy_email(const char *buf)
 {
 	const char *email = strchr(buf, '<');
 	const char *eoemail;
 	if (!email)
 		return xstrdup("");
-	switch (atom->u.email_option.option) {
-	case EO_RAW:
-		eoemail = strchr(email, '>');
-		if (eoemail)
-			eoemail++;
-		break;
-	case EO_TRIM:
-		email++;
-		eoemail = strchr(email, '>');
-		break;
-	case EO_LOCALPART:
-		email++;
-		eoemail = strchr(email, '@');
-		if (!eoemail)
-			eoemail = strchr(email, '>');
-		break;
-	default:
-		BUG("unknown email option");
-	}
-
+	eoemail = strchr(email, '>');
 	if (!eoemail)
 		return xstrdup("");
-	return xmemdupz(email, eoemail - email);
+	return xmemdupz(email, eoemail + 1 - email);
 }
 
 static char *copy_subject(const char *buf, unsigned long len)
@@ -1163,7 +1118,7 @@ static void grab_person(const char *who, struct atom_value *val, int deref, void
 			continue;
 		if (name[wholen] != 0 &&
 		    strcmp(name + wholen, "name") &&
-		    !starts_with(name + wholen, "email") &&
+		    strcmp(name + wholen, "email") &&
 		    !starts_with(name + wholen, "date"))
 			continue;
 		if (!wholine)
@@ -1174,8 +1129,8 @@ static void grab_person(const char *who, struct atom_value *val, int deref, void
 			v->s = copy_line(wholine);
 		else if (!strcmp(name + wholen, "name"))
 			v->s = copy_name(wholine);
-		else if (starts_with(name + wholen, "email"))
-			v->s = copy_email(wholine, &used_atom[i]);
+		else if (!strcmp(name + wholen, "email"))
+			v->s = copy_email(wholine);
 		else if (starts_with(name + wholen, "date"))
 			grab_date(wholine, v, name);
 	}
@@ -1288,8 +1243,8 @@ static void grab_sub_body_contents(struct atom_value *val, int deref, void *buf)
 			continue;
 		if (deref)
 			name++;
-		if (strcmp(name, "body") &&
-		    !starts_with(name, "subject") &&
+		if (strcmp(name, "subject") &&
+		    strcmp(name, "body") &&
 		    !starts_with(name, "trailers") &&
 		    !starts_with(name, "contents"))
 			continue;
@@ -1301,11 +1256,7 @@ static void grab_sub_body_contents(struct atom_value *val, int deref, void *buf)
 
 		if (atom->u.contents.option == C_SUB)
 			v->s = copy_subject(subpos, sublen);
-		else if (atom->u.contents.option == C_SUB_SANITIZE) {
-			struct strbuf sb = STRBUF_INIT;
-			format_sanitized_subject(&sb, subpos, sublen);
-			v->s = strbuf_detach(&sb, NULL);
-		} else if (atom->u.contents.option == C_BODY_DEP)
+		else if (atom->u.contents.option == C_BODY_DEP)
 			v->s = xmemdupz(bodypos, bodylen);
 		else if (atom->u.contents.option == C_LENGTH)
 			v->s = xstrfmt("%"PRIuMAX, (uintmax_t)strlen(subpos));
@@ -1755,7 +1706,7 @@ static int populate_value(struct ref_array_item *ref, struct strbuf *err)
 				v->s = xstrdup(buf + 1);
 			}
 			continue;
-		} else if (!deref && grab_oid(name, "objectname", &ref->objectname, v, atom)) {
+		} else if (!deref && grab_objectname(name, &ref->objectname, v, atom)) {
 			continue;
 		} else if (!strcmp(name, "HEAD")) {
 			if (atom->u.head && !strcmp(ref->refname, atom->u.head))
