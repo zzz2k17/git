@@ -809,7 +809,7 @@ static int get_oid_basic(struct repository *r, const char *str, int len,
 
 	if (len == r->hash_algo->hexsz && !get_oid_hex(str, oid)) {
 		if (warn_ambiguous_refs && warn_on_object_refname_ambiguity) {
-			refs_found = repo_dwim_ref(r, str, len, &tmp_oid, &real_ref, 0);
+			refs_found = repo_dwim_ref(r, str, len, &tmp_oid, &real_ref);
 			if (refs_found > 0) {
 				warning(warn_msg, len, str);
 				if (advice_object_name_warning)
@@ -860,11 +860,11 @@ static int get_oid_basic(struct repository *r, const char *str, int len,
 
 	if (!len && reflog_len)
 		/* allow "@{...}" to mean the current branch reflog */
-		refs_found = repo_dwim_ref(r, "HEAD", 4, oid, &real_ref, 0);
+		refs_found = repo_dwim_ref(r, "HEAD", 4, oid, &real_ref);
 	else if (reflog_len)
 		refs_found = repo_dwim_log(r, str, len, oid, &real_ref);
 	else
-		refs_found = repo_dwim_ref(r, str, len, oid, &real_ref, 0);
+		refs_found = repo_dwim_ref(r, str, len, oid, &real_ref);
 
 	if (!refs_found)
 		return -1;
@@ -1427,12 +1427,9 @@ static int reinterpret(struct repository *r,
 	struct strbuf tmp = STRBUF_INIT;
 	int used = buf->len;
 	int ret;
-	struct interpret_branch_name_options options = {
-		.allowed = allowed
-	};
 
 	strbuf_add(buf, name + len, namelen - len);
-	ret = repo_interpret_branch_name(r, buf->buf, buf->len, &tmp, &options);
+	ret = repo_interpret_branch_name(r, buf->buf, buf->len, &tmp, allowed);
 	/* that data was not interpreted, remove our cruft */
 	if (ret < 0) {
 		strbuf_setlen(buf, used);
@@ -1474,7 +1471,7 @@ static int interpret_branch_mark(struct repository *r,
 				 int (*get_mark)(const char *, int),
 				 const char *(*get_data)(struct branch *,
 							 struct strbuf *),
-				 const struct interpret_branch_name_options *options)
+				 unsigned allowed)
 {
 	int len;
 	struct branch *branch;
@@ -1496,16 +1493,10 @@ static int interpret_branch_mark(struct repository *r,
 		branch = branch_get(NULL);
 
 	value = get_data(branch, &err);
-	if (!value) {
-		if (options->nonfatal_dangling_mark) {
-			strbuf_release(&err);
-			return -1;
-		} else {
-			die("%s", err.buf);
-		}
-	}
+	if (!value)
+		die("%s", err.buf);
 
-	if (!branch_interpret_allowed(value, options->allowed))
+	if (!branch_interpret_allowed(value, allowed))
 		return -1;
 
 	set_shortened_ref(r, buf, value);
@@ -1515,7 +1506,7 @@ static int interpret_branch_mark(struct repository *r,
 int repo_interpret_branch_name(struct repository *r,
 			       const char *name, int namelen,
 			       struct strbuf *buf,
-			       const struct interpret_branch_name_options *options)
+			       unsigned allowed)
 {
 	char *at;
 	const char *start;
@@ -1524,7 +1515,7 @@ int repo_interpret_branch_name(struct repository *r,
 	if (!namelen)
 		namelen = strlen(name);
 
-	if (!options->allowed || (options->allowed & INTERPRET_BRANCH_LOCAL)) {
+	if (!allowed || (allowed & INTERPRET_BRANCH_LOCAL)) {
 		len = interpret_nth_prior_checkout(r, name, namelen, buf);
 		if (!len) {
 			return len; /* syntax Ok, not enough switches */
@@ -1532,8 +1523,7 @@ int repo_interpret_branch_name(struct repository *r,
 			if (len == namelen)
 				return len; /* consumed all */
 			else
-				return reinterpret(r, name, namelen, len, buf,
-						   options->allowed);
+				return reinterpret(r, name, namelen, len, buf, allowed);
 		}
 	}
 
@@ -1541,22 +1531,22 @@ int repo_interpret_branch_name(struct repository *r,
 	     (at = memchr(start, '@', namelen - (start - name)));
 	     start = at + 1) {
 
-		if (!options->allowed || (options->allowed & INTERPRET_BRANCH_HEAD)) {
+		if (!allowed || (allowed & INTERPRET_BRANCH_HEAD)) {
 			len = interpret_empty_at(name, namelen, at - name, buf);
 			if (len > 0)
 				return reinterpret(r, name, namelen, len, buf,
-						   options->allowed);
+						   allowed);
 		}
 
 		len = interpret_branch_mark(r, name, namelen, at - name, buf,
 					    upstream_mark, branch_get_upstream,
-					    options);
+					    allowed);
 		if (len > 0)
 			return len;
 
 		len = interpret_branch_mark(r, name, namelen, at - name, buf,
 					    push_mark, branch_get_push,
-					    options);
+					    allowed);
 		if (len > 0)
 			return len;
 	}
@@ -1567,10 +1557,7 @@ int repo_interpret_branch_name(struct repository *r,
 void strbuf_branchname(struct strbuf *sb, const char *name, unsigned allowed)
 {
 	int len = strlen(name);
-	struct interpret_branch_name_options options = {
-		.allowed = allowed
-	};
-	int used = interpret_branch_name(name, len, sb, &options);
+	int used = interpret_branch_name(name, len, sb, allowed);
 
 	if (used < 0)
 		used = 0;
