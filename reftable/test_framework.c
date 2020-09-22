@@ -11,9 +11,9 @@ https://developers.google.com/open-source/licenses/bsd
 #include "system.h"
 #include "basics.h"
 
-struct test_case **test_cases;
-int test_case_len;
-int test_case_cap;
+static struct test_case **test_cases;
+static int test_case_len;
+static int test_case_cap;
 
 struct test_case *new_test_case(const char *name, void (*testfunc)(void))
 {
@@ -56,7 +56,7 @@ int test_main(int argc, const char *argv[])
 		reftable_free(test_cases[i]);
 	}
 	reftable_free(test_cases);
-	test_cases = 0;
+	test_cases = NULL;
 	test_case_len = 0;
 	test_case_cap = 0;
 	return 0;

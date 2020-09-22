@@ -589,7 +589,7 @@ void writer_clear_index(struct reftable_writer *w)
 	w->index_cap = 0;
 }
 
-const int debug = 0;
+static const int debug;
 
 static int writer_flush_nonempty_block(struct reftable_writer *w)
 {
