@@ -82,7 +82,7 @@ test_expect_success 'bisect fails if given any junk instead of revs' '
 	git bisect bad $HASH4
 '
 
-test_expect_success 'bisect start without -- uses unknown arg as path restriction' '
+test_expect_success 'bisect start without -- takes unknown arg as pathspec' '
 	git bisect reset &&
 	git bisect start foo bar &&
 	grep foo ".git/BISECT_NAMES" &&
